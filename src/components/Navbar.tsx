@@ -35,7 +35,7 @@ const Navbar = () => {
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <UtensilsCrossed className="w-6 h-6 text-primary" />
-          <span className="text-xl font-bold">TableBooker</span>
+          <span className="text-xl font-bold">DineIt</span>
         </Link>
 
         <div className="flex items-center gap-4">
