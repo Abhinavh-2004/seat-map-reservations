@@ -161,7 +161,7 @@ CREATE POLICY "Users can view their own roles"
 CREATE POLICY "Admins can manage all roles"
   ON public.user_roles FOR ALL
   TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 -- Restaurants policies
 CREATE POLICY "Everyone can view restaurants"
@@ -172,17 +172,17 @@ CREATE POLICY "Everyone can view restaurants"
 CREATE POLICY "Admins can insert restaurants"
   ON public.restaurants FOR INSERT
   TO authenticated
-  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+  WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));
 
 CREATE POLICY "Admins can update restaurants"
   ON public.restaurants FOR UPDATE
   TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 CREATE POLICY "Admins can delete restaurants"
   ON public.restaurants FOR DELETE
   TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 -- Restaurant admins policies
 CREATE POLICY "Users can view restaurant admins"
@@ -193,7 +193,7 @@ CREATE POLICY "Users can view restaurant admins"
 CREATE POLICY "Admins can manage restaurant admins"
   ON public.restaurant_admins FOR ALL
   TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 
 -- Tables policies
 CREATE POLICY "Everyone can view tables"
@@ -205,7 +205,7 @@ CREATE POLICY "Hotel admins can manage their restaurant tables"
   ON public.tables FOR ALL
   TO authenticated
   USING (
-    public.has_role(auth.uid(), 'admin') OR
+    public.has_role(auth.uid(), 'admin'::app_role) OR
     EXISTS (
       SELECT 1 FROM public.restaurant_admins
       WHERE restaurant_admins.restaurant_id = tables.restaurant_id
@@ -223,7 +223,7 @@ CREATE POLICY "Hotel admins can manage seats"
   ON public.seats FOR ALL
   TO authenticated
   USING (
-    public.has_role(auth.uid(), 'admin') OR
+    public.has_role(auth.uid(), 'admin'::app_role) OR
     EXISTS (
       SELECT 1 FROM public.restaurant_admins ra
       JOIN public.tables t ON t.restaurant_id = ra.restaurant_id
@@ -238,7 +238,7 @@ CREATE POLICY "Users can view their own bookings"
   TO authenticated
   USING (
     user_id = auth.uid() OR
-    public.has_role(auth.uid(), 'admin') OR
+    public.has_role(auth.uid(), 'admin'::app_role) OR
     EXISTS (
       SELECT 1 FROM public.restaurant_admins
       WHERE restaurant_admins.restaurant_id = bookings.restaurant_id
@@ -266,7 +266,7 @@ CREATE POLICY "Users can view booking seats"
       WHERE bookings.id = booking_seats.booking_id
       AND bookings.user_id = auth.uid()
     ) OR
-    public.has_role(auth.uid(), 'admin')
+    public.has_role(auth.uid(), 'admin'::app_role)
   );
 
 CREATE POLICY "Users can create booking seats"
@@ -290,7 +290,7 @@ CREATE POLICY "Hotel admins can manage menu items"
   ON public.menu_items FOR ALL
   TO authenticated
   USING (
-    public.has_role(auth.uid(), 'admin') OR
+    public.has_role(auth.uid(), 'admin'::app_role) OR
     EXISTS (
       SELECT 1 FROM public.restaurant_admins
       WHERE restaurant_admins.restaurant_id = menu_items.restaurant_id

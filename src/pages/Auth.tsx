@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,9 +19,14 @@ const Auth = () => {
   const [signupPassword, setSignupPassword] = useState("");
   const [signupFullName, setSignupFullName] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
+  const [signupIsRestaurant, setSignupIsRestaurant] = useState(false);
+  const [restaurantName, setRestaurantName] = useState("");
   // Admin login state
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  // Restaurant (hotel admin) login state
+  const [restaurantEmail, setRestaurantEmail] = useState("");
+  const [restaurantPassword, setRestaurantPassword] = useState("");
   // Admin login handler
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +52,40 @@ const Auth = () => {
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to log in as admin");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Restaurant (hotel_admin) login handler
+  const handleRestaurantLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: restaurantEmail,
+        password: restaurantPassword,
+      });
+      if (error) throw error;
+
+      // Check if user has hotel_admin role OR is listed in restaurant_admins
+      const [{ data: rolesData }, { data: adminsData }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", data.user.id),
+        supabase.from("restaurant_admins").select("restaurant_id").eq("user_id", data.user.id),
+      ]);
+
+      const hasHotelRole = rolesData && rolesData.some((r: any) => r.role === "hotel_admin");
+      const isRestaurantAdmin = adminsData && adminsData.length > 0;
+
+      if (hasHotelRole || isRestaurantAdmin) {
+        toast.success("Restaurant admin login successful!");
+        navigate("/dashboard");
+      } else {
+        toast.error("Not a restaurant admin account");
+        await supabase.auth.signOut();
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to log in as restaurant admin");
     } finally {
       setIsLoading(false);
     }
@@ -90,6 +130,30 @@ const Auth = () => {
       });
 
       if (error) throw error;
+
+      // If registering as a restaurant, create restaurant record and grant hotel_admin role
+      if (signupIsRestaurant && restaurantName.trim() !== "") {
+        // Wait for session to be available
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId) {
+          // Create restaurant
+          const { error: rErr } = await supabase.from("restaurants").insert([{ name: restaurantName, created_by: userId }]);
+          if (rErr) throw rErr;
+
+          // Assign hotel_admin role
+          const { error: roleErr } = await supabase.from("user_roles").insert([{ user_id: userId, role: "hotel_admin" }]);
+          if (roleErr) throw roleErr;
+
+          // Optionally link as restaurant_admin to the created restaurant
+          // Fetch restaurant id
+          const { data: createdRestaurants } = await supabase.from("restaurants").select("id").eq("created_by", userId).order("created_at", { ascending: false }).limit(1);
+          const restaurantId = createdRestaurants && createdRestaurants[0]?.id;
+          if (restaurantId) {
+            await supabase.from("restaurant_admins").insert([{ restaurant_id: restaurantId, user_id: userId }]);
+          }
+        }
+      }
 
       toast.success("Account created! Redirecting...");
       navigate("/dashboard");
@@ -184,6 +248,31 @@ const Auth = () => {
                     onChange={(e) => setSignupPhone(e.target.value)}
                   />
                 </div>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={signupIsRestaurant}
+                    onCheckedChange={(v) => setSignupIsRestaurant(Boolean(v))}
+                    aria-describedby="restaurant-info"
+                  />
+                  <div>
+                    <div className="font-medium">Register as a restaurant</div>
+                    <div id="restaurant-info" className="text-sm text-muted-foreground">If checked, you will create a restaurant and become its restaurant admin.</div>
+                  </div>
+                </div>
+
+                {signupIsRestaurant && (
+                  <div className="space-y-2">
+                    <Label htmlFor="restaurant-name">Restaurant Name</Label>
+                    <Input
+                      id="restaurant-name"
+                      type="text"
+                      placeholder="My Great Restaurant"
+                      value={restaurantName}
+                      onChange={(e) => setRestaurantName(e.target.value)}
+                      required={signupIsRestaurant}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Password</Label>
                   <Input
