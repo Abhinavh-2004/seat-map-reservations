@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Store } from "lucide-react";
 import MenuManagement from "./MenuManagement";
 import TableManagement from "./TableManagement";
+import SeatMapEditor from "./SeatMapEditor";
 
 interface Restaurant {
   id: string;
@@ -74,11 +75,16 @@ const HotelAdminDashboard = () => {
         </div>
 
         {selectedRestaurant && (
-          <Tabs defaultValue="tables" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs defaultValue="seatmap" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="seatmap">Seat Map Editor</TabsTrigger>
               <TabsTrigger value="tables">Tables & Seats</TabsTrigger>
               <TabsTrigger value="menu">Menu Items</TabsTrigger>
             </TabsList>
+            
+            <TabsContent value="seatmap" className="mt-6">
+              <SeatMapEditor restaurantId={selectedRestaurant} />
+            </TabsContent>
             
             <TabsContent value="tables" className="mt-6">
               <TableManagement restaurantId={selectedRestaurant} />
