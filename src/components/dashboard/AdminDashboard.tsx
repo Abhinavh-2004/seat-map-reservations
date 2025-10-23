@@ -9,16 +9,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, Store } from "lucide-react";
 
-interface Restaurant {
+interface RestaurantWithAdmin {
   id: string;
   name: string;
   description: string;
   address: string;
   phone: string;
+  admin_email: string | null;
 }
 
 const AdminDashboard = () => {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurants, setRestaurants] = useState<RestaurantWithAdmin[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newRestaurant, setNewRestaurant] = useState({
     name: "",
@@ -32,16 +33,36 @@ const AdminDashboard = () => {
   }, []);
 
   const fetchRestaurants = async () => {
+    // Join restaurants -> restaurant_admins -> auth.users to get admin email
     const { data, error } = await supabase
       .from("restaurants")
-      .select("*")
+      .select(`id, name, description, address, phone, restaurant_admins:user_id(id, user_id, users:auth.users(email))`)
       .order("created_at", { ascending: false });
 
     if (error) {
       toast.error("Failed to fetch restaurants");
-    } else {
-      setRestaurants(data || []);
+      return;
     }
+    // For each restaurant, find the first admin's email (if any)
+    const restaurantsWithAdmin: RestaurantWithAdmin[] = (data || []).map((r: any) => {
+      let admin_email: string | null = null;
+      if (Array.isArray(r.restaurant_admins) && r.restaurant_admins.length > 0) {
+        // Find the first admin with a user and email
+        const admin = r.restaurant_admins[0];
+        if (admin && admin.users && admin.users.email) {
+          admin_email = admin.users.email;
+        }
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        address: r.address,
+        phone: r.phone,
+        admin_email,
+      };
+    });
+    setRestaurants(restaurantsWithAdmin);
   };
 
   const handleAddRestaurant = async () => {
@@ -168,6 +189,9 @@ const AdminDashboard = () => {
               {restaurant.phone && (
                 <p className="text-sm mt-2 font-medium">{restaurant.phone}</p>
               )}
+              <div className="mt-2 text-xs text-muted-foreground">
+                <span className="font-semibold">Admin Email:</span> {restaurant.admin_email || <span className="italic">No admin</span>}
+              </div>
             </CardContent>
           </Card>
         ))}

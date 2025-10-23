@@ -42,7 +42,7 @@ const Auth = () => {
         .from("user_roles")
         .select("role")
         .eq("user_id", data.user.id);
-      const isAdmin = rolesData && rolesData.some((r: any) => r.role === "admin");
+      const isAdmin = Array.isArray(rolesData) && rolesData.some((r) => (r as { role?: string }).role === "admin");
       if (isAdmin) {
         toast.success("Admin login successful!");
         navigate("/dashboard");
@@ -50,8 +50,9 @@ const Auth = () => {
         toast.error("Not an admin account");
         await supabase.auth.signOut();
       }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to log in as admin");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || "Failed to log in as admin");
     } finally {
       setIsLoading(false);
     }
@@ -74,8 +75,8 @@ const Auth = () => {
         supabase.from("restaurant_admins").select("restaurant_id").eq("user_id", data.user.id),
       ]);
 
-      const hasHotelRole = rolesData && rolesData.some((r: any) => r.role === "hotel_admin");
-      const isRestaurantAdmin = adminsData && adminsData.length > 0;
+      const hasHotelRole = Array.isArray(rolesData) && rolesData.some((r) => (r as { role?: string }).role === "hotel_admin");
+      const isRestaurantAdmin = Array.isArray(adminsData) && adminsData.length > 0;
 
       if (hasHotelRole || isRestaurantAdmin) {
         toast.success("Restaurant admin login successful!");
@@ -84,8 +85,9 @@ const Auth = () => {
         toast.error("Not a restaurant admin account");
         await supabase.auth.signOut();
       }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to log in as restaurant admin");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || "Failed to log in as restaurant admin");
     } finally {
       setIsLoading(false);
     }
@@ -105,8 +107,9 @@ const Auth = () => {
 
       toast.success("Welcome back!");
       navigate("/dashboard");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to log in");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || "Failed to log in");
     } finally {
       setIsLoading(false);
     }
@@ -124,6 +127,8 @@ const Auth = () => {
           data: {
             full_name: signupFullName,
             phone: signupPhone,
+            is_restaurant: signupIsRestaurant ? 'true' : 'false',
+            restaurant_name: signupIsRestaurant ? restaurantName : null,
           },
           emailRedirectTo: `${window.location.origin}/dashboard`,
         },
@@ -157,8 +162,9 @@ const Auth = () => {
 
       toast.success("Account created! Redirecting...");
       navigate("/dashboard");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to sign up");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message || "Failed to sign up");
     } finally {
       setIsLoading(false);
     }

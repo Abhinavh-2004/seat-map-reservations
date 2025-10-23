@@ -1,11 +1,29 @@
--- Create enum for user roles
-CREATE TYPE public.app_role AS ENUM ('admin', 'hotel_admin', 'user');
+-- Ensure required extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Create enum for table status
-CREATE TYPE public.table_status AS ENUM ('available', 'occupied', 'standby');
+-- Create enum for user roles (safe)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+    CREATE TYPE public.app_role AS ENUM ('admin', 'hotel_admin', 'user');
+  END IF;
+END$$;
 
--- Create enum for seat status
-CREATE TYPE public.seat_status AS ENUM ('available', 'occupied', 'reserved');
+-- Create enum for table status (safe)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'table_status') THEN
+    CREATE TYPE public.table_status AS ENUM ('available', 'occupied', 'standby');
+  END IF;
+END$$;
+
+-- Create enum for seat status (safe)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'seat_status') THEN
+    CREATE TYPE public.seat_status AS ENUM ('available', 'occupied', 'reserved');
+  END IF;
+END$$;
 
 -- Create profiles table
 CREATE TABLE public.profiles (
@@ -21,7 +39,7 @@ CREATE TABLE public.profiles (
 CREATE TABLE public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role app_role NOT NULL DEFAULT 'user',
+  role app_role NOT NULL DEFAULT 'user'::app_role,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   UNIQUE(user_id, role)
 );
@@ -38,7 +56,7 @@ AS $$
     SELECT 1
     FROM public.user_roles
     WHERE user_id = _user_id AND role = _role
-  )
+  );
 $$;
 
 -- Create restaurants table
@@ -125,7 +143,6 @@ CREATE TABLE public.menu_items (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Enable RLS on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.restaurants ENABLE ROW LEVEL SECURITY;
@@ -169,6 +186,8 @@ CREATE POLICY "Everyone can view restaurants"
   TO authenticated
   USING (true);
 
+CLEAR
+-- NOTE: Restaurants can be created by server-side trigger when users sign up with is_restaurant=true
 CREATE POLICY "Admins can insert restaurants"
   ON public.restaurants FOR INSERT
   TO authenticated
@@ -305,17 +324,39 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  _is_restaurant TEXT;
+  _restaurant_name TEXT;
+  _rest_id UUID;
 BEGIN
+  -- Create profile
   INSERT INTO public.profiles (user_id, full_name)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', '')
   );
-  
+
   -- Auto-assign 'user' role to new signups
   INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, 'user');
-  
+  VALUES (NEW.id, 'user'::app_role);
+
+  -- If user signed up as a restaurant, create restaurant and assign hotel_admin role
+  _is_restaurant := COALESCE(NEW.raw_user_meta_data->>'is_restaurant', 'false');
+  IF lower(_is_restaurant) = 'true' THEN
+    _restaurant_name := COALESCE(NEW.raw_user_meta_data->>'restaurant_name', 'Unnamed Restaurant');
+    INSERT INTO public.restaurants (name, created_by)
+    VALUES (_restaurant_name, NEW.id)
+    RETURNING id INTO _rest_id;
+
+    -- Assign hotel_admin role
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (NEW.id, 'hotel_admin'::app_role);
+
+    -- Link as restaurant_admin
+    INSERT INTO public.restaurant_admins (restaurant_id, user_id)
+    VALUES (_rest_id, NEW.id);
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -336,32 +377,93 @@ BEGIN
 END;
 $$;
 
--- Add updated_at triggers
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+-- Add updated_at triggers (unique trigger names per table)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_profiles'
+  ) THEN
+    CREATE TRIGGER set_updated_at_profiles
+      BEFORE UPDATE ON public.profiles
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
 
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.restaurants
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_restaurants'
+  ) THEN
+    CREATE TRIGGER set_updated_at_restaurants
+      BEFORE UPDATE ON public.restaurants
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
 
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.tables
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_tables'
+  ) THEN
+    CREATE TRIGGER set_updated_at_tables
+      BEFORE UPDATE ON public.tables
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
 
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.seats
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_seats'
+  ) THEN
+    CREATE TRIGGER set_updated_at_seats
+      BEFORE UPDATE ON public.seats
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
 
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.bookings
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_bookings'
+  ) THEN
+    CREATE TRIGGER set_updated_at_bookings
+      BEFORE UPDATE ON public.bookings
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
 
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.menu_items
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'set_updated_at_menu_items'
+  ) THEN
+    CREATE TRIGGER set_updated_at_menu_items
+      BEFORE UPDATE ON public.menu_items
+      FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+  END IF;
+END$$;
 
--- Enable realtime for key tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.tables;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.seats;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+-- Enable realtime for key tables (create publication if missing and add tables if not present)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime FOR ALL TABLES;
+  END IF;
+
+  -- Add tables if not already present in publication
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_rel pr
+    JOIN pg_publication p ON pr.prpubid = p.oid
+    JOIN pg_class c ON pr.prrelid = c.oid
+    WHERE p.pubname = 'supabase_realtime' AND c.relname = 'tables'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.tables;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_rel pr
+    JOIN pg_publication p ON pr.prpubid = p.oid
+    JOIN pg_class c ON pr.prrelid = c.oid
+    WHERE p.pubname = 'supabase_realtime' AND c.relname = 'seats'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.seats;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_rel pr
+    JOIN pg_publication p ON pr.prpubid = p.oid
+    JOIN pg_class c ON pr.prrelid = c.oid
+    WHERE p.pubname = 'supabase_realtime' AND c.relname = 'bookings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+  END IF;
+END$$;
