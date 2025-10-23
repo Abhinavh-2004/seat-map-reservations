@@ -22,9 +22,12 @@ interface Seat {
 
 interface SeatMapProps {
   restaurantId: string;
+  bookingDate?: Date;
+  bookingTime?: string;
+  onBookingSuccess?: (seatCount: number, tableNumber: number) => void;
 }
 
-const SeatMap = ({ restaurantId }: SeatMapProps) => {
+const SeatMap = ({ restaurantId, bookingDate, bookingTime, onBookingSuccess }: SeatMapProps) => {
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -112,6 +115,9 @@ const SeatMap = ({ restaurantId }: SeatMapProps) => {
       return;
     }
 
+    // Use provided date/time or current date
+    const bookingDateTime = bookingDate || new Date();
+
     // Create booking
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
@@ -120,7 +126,7 @@ const SeatMap = ({ restaurantId }: SeatMapProps) => {
           user_id: user.id,
           restaurant_id: restaurantId,
           table_id: selectedTableId,
-          booking_date: new Date().toISOString(),
+          booking_date: bookingDateTime.toISOString(),
           party_size: selectedSeats.size,
           status: "confirmed",
         },
@@ -159,7 +165,16 @@ const SeatMap = ({ restaurantId }: SeatMapProps) => {
       return;
     }
 
-    toast.success("Booking confirmed!");
+    // Get table number for success message
+    const selectedTable = tables.find(t => t.id === selectedTableId);
+    const tableNumber = selectedTable?.table_number || 0;
+
+    if (onBookingSuccess) {
+      onBookingSuccess(selectedSeats.size, tableNumber);
+    } else {
+      toast.success("Booking confirmed!");
+    }
+
     setSelectedSeats(new Set());
     setSelectedTableId(null);
     fetchTablesAndSeats();

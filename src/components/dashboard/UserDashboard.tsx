@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Store, MapPin, Phone, ChevronRight } from "lucide-react";
+import { Store, MapPin, Phone, ChevronRight, Calendar } from "lucide-react";
+import BookingDialog from "@/components/booking/BookingDialog";
 
 interface Restaurant {
   id: string;
@@ -17,6 +18,8 @@ interface Restaurant {
 const UserDashboard = () => {
   const navigate = useNavigate();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchRestaurants();
@@ -33,6 +36,11 @@ const UserDashboard = () => {
     }
   };
 
+  const handleBookNow = (restaurant: Restaurant) => {
+    setSelectedRestaurant(restaurant);
+    setBookingDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -44,8 +52,7 @@ const UserDashboard = () => {
         {restaurants.map((restaurant) => (
           <Card
             key={restaurant.id}
-            className="hover:shadow-xl transition-all cursor-pointer group"
-            onClick={() => navigate(`/restaurant/${restaurant.id}`)}
+            className="hover:shadow-xl transition-all group"
           >
             <div className="h-48 bg-gradient-to-br from-primary/20 to-accent/20 rounded-t-lg flex items-center justify-center">
               <Store className="w-16 h-16 text-primary/40" />
@@ -53,11 +60,10 @@ const UserDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>{restaurant.name}</span>
-                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
               </CardTitle>
               <CardDescription className="line-clamp-2">{restaurant.description}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {restaurant.address && (
                 <div className="flex items-start gap-2 text-sm">
                   <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -70,9 +76,25 @@ const UserDashboard = () => {
                   <span className="text-muted-foreground">{restaurant.phone}</span>
                 </div>
               )}
-              <Button className="w-full mt-4" variant="outline">
-                View Seat Map
-              </Button>
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <Button
+                  onClick={() => handleBookNow(restaurant)}
+                  className="w-full"
+                  size="sm"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Book Now
+                </Button>
+                <Button
+                  onClick={() => navigate(`/restaurant/${restaurant.id}`)}
+                  variant="outline"
+                  className="w-full"
+                  size="sm"
+                >
+                  <ChevronRight className="w-4 h-4 mr-2" />
+                  View Details
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -85,6 +107,15 @@ const UserDashboard = () => {
             <p className="text-muted-foreground">No restaurants available yet.</p>
           </CardContent>
         </Card>
+      )}
+
+      {selectedRestaurant && (
+        <BookingDialog
+          open={bookingDialogOpen}
+          onOpenChange={setBookingDialogOpen}
+          restaurantId={selectedRestaurant.id}
+          restaurantName={selectedRestaurant.name}
+        />
       )}
     </div>
   );
